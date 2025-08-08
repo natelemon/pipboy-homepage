@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pip‑Boy Home</title>
+  <style>
+    /* ==========================
+       PIP-BOY THEME VARIABLES
+       Tweak these or use the in-page Settings (gear icon) to change them.
+    ===========================*/
+    :root {
+      --bg: #0a0f0a;            /* Background */
+      --fg: #9dfc95;            /* Primary green */
+      --accent: #6bff6b;        /* Accent green */
+      --dim: #3a7f3a;           /* Dimmer UI */
+      --grid: rgba(157,252,149,0.08); /* background grid lines */
+      --scanline-opacity: 0.18; /* 0 to 0.35 */
+      --glow-strength: 0.8;     /* 0 to 1.2 */
+      --radius: 12px;           /* corner radius */
+      --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* ==========================
+       GLOBAL / CRT LOOK
+    ===========================*/
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 800px at 50% 40%, rgba(157,252,149,0.05), transparent 60%),
+                  var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      letter-spacing: 0.4px;
+      text-shadow: 0 0 calc(1px + 0.6vmin) rgba(157,252,149, var(--glow-strength));
+      overflow: hidden;
+    }
+
+    /* Subtle curvature & vignette */
+    .crt:before{
+      content: "";
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background:
+        /* Scanlines */
+        linear-gradient(rgba(0,0,0,var(--scanline-opacity)) 1px, transparent 1px),
+        /* Subtle vertical lines */
+        linear-gradient(90deg, rgba(157,252,149,0.03) 1px, transparent 1px);
+      background-size: 100% 3px, 3px 100%;
+      mix-blend-mode: multiply;
+    }
+    .crt:after{
+      content: "";
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(120% 85% at 50% 45%, transparent 60%, rgba(0,0,0,0.35) 80%),
+        radial-gradient(200% 120% at 50% 50%, rgba(0,0,0,0.25), transparent 55%);
+    }
+
+    /* ==========================
+       LAYOUT
+    ===========================*/
+    .wrap {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 260px 1fr 260px; /* sidebar | main | info */
+      gap: 16px;
+      padding: 18px 18px 14px 18px;
+      box-sizing: border-box;
+    }
+
+    .panel { border: 1px solid var(--dim); border-radius: var(--radius); padding: 12px; background: rgba(0, 30, 0, 0.25); }
+    .panel h2 { margin: 0 0 10px; font-size: 14px; color: var(--accent); }
+
+    /* Header */
+    .header { grid-column: 1 / -1; display: grid; grid-template-columns: 200px 1fr 200px; align-items: center; gap: 12px; }
+    .brand { display:flex; align-items:center; gap:10px; }
+    .brand .pip { width: 26px; height: 26px; }
+    .brand .title { font-weight: 700; letter-spacing: 2px; }
+
+    .clock { text-align: right; font-size: 14px; }
+
+    /* Tabs */
+    .tabs { display:flex; gap: 10px; }
+    .tab { border: 1px solid var(--dim); padding: 6px 10px; border-radius: 999px; cursor: pointer; user-select:none; }
+    .tab.active { background: rgba(157,252,149,0.08); border-color: var(--accent); }
+
+    /* Sidebar */
+    .sidebar .section { margin-bottom: 12px; }
+    .status-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .status-item { display:flex; justify-content: space-between; border:1px solid var(--dim); padding:6px 8px; border-radius: 8px; background: rgba(157,252,149,0.05); }
+
+    /* Main */
+    .main { display: grid; grid-template-rows: auto 1fr auto; gap: 12px; }
+
+    .search { display:flex; gap:8px; }
+    .search input { flex:1; background: transparent; color: var(--fg); border: 1px solid var(--dim); border-radius: var(--radius); padding:10px; outline: none; }
+    .search button { border:1px solid var(--dim); background: transparent; color: var(--fg); padding: 10px 14px; border-radius: var(--radius); cursor: pointer; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .card { border:1px solid var(--dim); border-radius: var(--radius); padding: 10px; background: rgba(0, 30, 0, 0.2); min-height: 68px; position: relative; }
+    .card a { color: var(--fg); text-decoration: none; display:block; }
+    .card .emoji { font-size: 20px; margin-right:6px; }
+    .card .title { font-size: 14px; }
+    .card .url { font-size: 11px; color: var(--accent); opacity: 0.75; word-break: break-all; }
+    .card .edit { position:absolute; right:8px; top:8px; font-size:12px; opacity:0.7; cursor:pointer; }
+
+    /* Info Panel */
+    .info .list { list-style: none; margin:0; padding:0; display:grid; gap:8px; }
+    .info .list li { border:1px solid var(--dim); border-radius: 8px; padding:8px; display:flex; justify-content:space-between; align-items:center; }
+
+    .btn { border:1px solid var(--dim); background: transparent; color: var(--fg); padding: 8px 12px; border-radius: var(--radius); cursor: pointer; }
+
+    /* Settings Modal */
+    .modal {
+      position: fixed; inset: 0; display: none; place-items: center; background: rgba(0,0,0,0.6);
+    }
+    .modal.open { display: grid; }
+    .modal .dialog { width: min(860px, 92vw); max-height: 86vh; overflow:auto; background: #021402; border:1px solid var(--accent); border-radius: 14px; padding: 16px; }
+    .modal h3 { margin: 0 0 12px; color: var(--accent); }
+    .settings-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .settings-grid .group { border:1px solid var(--dim); border-radius: 12px; padding: 10px; background: rgba(157,252,149,0.05); }
+    .settings-grid label { display:block; font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
+    .settings-grid input[type="text"], .settings-grid input[type="number"], .settings-grid input[type="color"], .settings-grid textarea, .settings-grid select {
+      width: 100%; box-sizing: border-box; background: transparent; color: var(--fg); border:1px solid var(--dim); border-radius: 10px; padding: 8px; font-family: var(--font);
+    }
+    .settings-grid textarea { min-height: 120px; }
+
+    .footer { grid-column: 1 / -1; display:flex; justify-content: space-between; align-items:center; opacity:0.8; font-size:12px; }
+    .gear { cursor:pointer; font-size: 18px; }
+
+    /* Responsive tweaks */
+    @media (max-width: 1100px) {
+      .wrap { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; overflow:auto; }
+      .header { grid-template-columns: 1fr; gap: 6px; }
+      .clock { text-align:left; }
+      .sidebar, .info { display:none; }
+    }
+  </style>
+</head>
+<body class="crt">
+  <div class="wrap">
+    <!-- HEADER -->
+    <div class="header">
+      <div class="brand panel">
+        <svg class="pip" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="currentColor" d="M12 2c-2.9 0-5 1.5-6.3 3.3c-.8 1.1-1.3 2.3-1.5 3.2H2v6h2.2c.2.9.7 2.1 1.5 3.2C7 19.5 9.1 21 12 21s5-1.5 6.3-3.3c.8-1.1 1.3-2.3 1.5-3.2H22V8.5h-2.2c-.2-.9-.7-2.1-1.5-3.2C17 3.5 14.9 2 12 2Zm0 3c3.3 0 5 2.6 5 7s-1.7 7-5 7s-5-2.6-5-7s1.7-7 5-7Zm0 2.2c-1.7 0-2.8 2.1-2.8 4.8S10.3 16.8 12 16.8s2.8-2.1 2.8-4.8S13.7 7.2 12 7.2Z"/></svg>
+        <div>
+          <div class="title">PIP‑BOY INTERFACE</div>
+          <div style="font-size:12px; opacity:0.8">STATUS · DATA · MAP · RADIO</div>
+        </div>
+      </div>
+      <div class="tabs panel" id="tabs">
+        <div class="tab active" data-tab="DATA">DATA</div>
+        <div class="tab" data-tab="STATUS">STATUS</div>
+        <div class="tab" data-tab="MAP">MAP</div>
+        <div class="tab" data-tab="RADIO">RADIO</div>
+      </div>
+      <div class="clock panel" id="clock">--:--</div>
+    </div>
+
+    <!-- SIDEBAR LEFT -->
+    <div class="sidebar panel">
+      <h2>STATUS</h2>
+      <ul class="status-list" id="statusList">
+        <li class="status-item"><span>HP</span><strong id="hp">95%</strong></li>
+        <li class="status-item"><span>Rads</span><strong id="rads">2</strong></li>
+        <li class="status-item"><span>AP</span><strong id="ap">70%</strong></li>
+        <li class="status-item"><span>Level</span><strong id="lvl">21</strong></li>
+      </ul>
+    </div>
+
+    <!-- MAIN -->
+    <main class="main">
+      <div class="search panel">
+        <input id="q" type="text" placeholder="Search the wastes…  (Press / to focus)" />
+        <button id="searchBtn">Search</button>
+      </div>
+
+      <!-- DATA (Bookmarks Grid) -->
+      <section class="panel" id="DATA">
+        <h2>BOOKMARKS</h2>
+        <div class="grid" id="grid"></div>
+      </section>
+
+      <!-- STATUS Tab Mirror (fun) -->
+      <section class="panel" id="STATUS" style="display:none">
+        <h2>STATS</h2>
+        <p>Just vibes. Configure values in Settings → "Cosmetics & Misc".</p>
+      </section>
+
+      <!-- MAP Tab (custom links) -->
+      <section class="panel" id="MAP" style="display:none">
+        <h2>MAP / SITES</h2>
+        <div class="grid" id="mapGrid"></div>
+      </section>
+
+      <!-- RADIO Tab (custom text/notes) -->
+      <section class="panel" id="RADIO" style="display:none">
+        <h2>RADIO / NOTES</h2>
+        <textarea id="notes" style="width:100%; height:220px; background:transparent; color:var(--fg); border:1px solid var(--dim); border-radius:12px; padding:10px;">"Diamond City Radio reporting in…"  – Put your notes here.</textarea>
+      </section>
+    </main>
+
+    <!-- INFO RIGHT -->
+    <aside class="info panel">
+      <h2>SYSTEM</h2>
+      <ul class="list">
+        <li><span>Theme</span><strong id="themeName">Pip‑Green</strong></li>
+        <li><span>Time</span><strong id="timeFmt">24‑hour</strong></li>
+        <li><span>Engine</span><strong id="engineName">DuckDuckGo</strong></li>
+      </ul>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="btn" id="addBookmark">＋ Bookmark</button>
+        <button class="btn" id="openSettings">⚙ Settings</button>
+      </div>
+    </aside>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div>Shortcuts: <strong>/</strong> focus search · <strong>e</strong> edit selected · <strong>n</strong> new bookmark</div>
+      <div class="gear" id="gear" title="Open Settings">⚙</div>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="dialog">
+      <h3 id="settingsTitle">Settings</h3>
+      <div class="settings-grid">
+        <div class="group">
+          <h4>Search</h4>
+          <label>Name</label>
+          <input id="engineNameInput" type="text" placeholder="DuckDuckGo" />
+          <label style="margin-top:6px">URL Template (use {q})</label>
+          <input id="engineTmplInput" type="text" placeholder="https://duckduckgo.com/?q={q}" />
+          <label style="margin-top:6px">Open in</label>
+          <select id="engineTarget">
+            <option value="_self">Same tab</option>
+            <option value="_blank">New tab</option>
+          </select>
+        </div>
+        <div class="group">
+          <h4>Theme Colors</h4>
+          <label>Foreground</label>
+          <input id="fgColor" type="color" value="#9dfc95" />
+          <label>Accent</label>
+          <input id="accentColor" type="color" value="#6bff6b" />
+          <label>Grid lines opacity (0-0.2)</label>
+          <input id="gridOpacity" type="number" min="0" max="0.2" step="0.01" value="0.08" />
+          <label>Scanlines opacity (0-0.35)</label>
+          <input id="scanOpacity" type="number" min="0" max="0.35" step="0.01" value="0.18" />
+          <label>Glow strength (0-1.2)</label>
+          <input id="glow" type="number" min="0" max="1.2" step="0.05" value="0.8" />
+        </div>
+        <div class="group">
+          <h4>Time & Misc</h4>
+          <label>Time format</label>
+          <select id="timeFormat">
+            <option value="24">24-hour</option>
+            <option value="12">12-hour</option>
+          </select>
+          <label style="margin-top:6px">Fake HP / AP / Rads / Lvl</label>
+          <input id="hpInput" type="text" placeholder="95%" />
+          <input id="apInput" type="text" placeholder="70%" />
+          <input id="radsInput" type="text" placeholder="2" />
+          <input id="lvlInput" type="text" placeholder="21" />
+        </div>
+        <div class="group">
+          <h4>Data (Bookmarks & Map)</h4>
+          <label>Bookmarks JSON</label>
+          <textarea id="bookmarksJson"></textarea>
+          <label style="margin-top:6px">Map Links JSON</label>
+          <textarea id="mapJson"></textarea>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn" id="exportBtn">Export</button>
+            <button class="btn" id="importBtn">Import</button>
+            <input id="importFile" type="file" accept="application/json" style="display:none" />
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:12px;">
+        <button class="btn" id="resetBtn">Reset</button>
+        <button class="btn" id="closeSettings">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==============================
+    // DEFAULT DATA (you can edit here or in Settings)
+    // ==============================
+    const DEFAULTS = {
+      engine: { name: 'DuckDuckGo', tmpl: 'https://duckduckgo.com/?q={q}', target: '_self' },
+      timeFormat: '24',
+      theme: { fg: '#9dfc95', accent: '#6bff6b', gridOpacity: 0.08, scan: 0.18, glow: 0.8 },
+      status: { hp: '95%', ap: '70%', rads: '2', lvl: '21' },
+      bookmarks: [
+        { title: 'Vivaldi', url: 'https://vivaldi.com', emoji: '🦋' },
+        { title: 'GitHub', url: 'https://github.com', emoji: '🐙' },
+        { title: 'YouTube', url: 'https://youtube.com', emoji: '▶️' },
+        { title: 'Reddit', url: 'https://www.reddit.com', emoji: '👽' },
+        { title: 'ChatGPT', url: 'https://chat.openai.com', emoji: '🤖' }
+      ],
+      map: [
+        { title: 'Mail', url: 'https://mail.google.com', emoji: '✉️' },
+        { title: 'Calendar', url: 'https://calendar.google.com', emoji: '📆' },
+        { title: 'Docs', url: 'https://drive.google.com', emoji: '📄' }
+      ]
+    };
+
+    // Load from storage or defaults
+    const loadState = () => {
+      try {
+        const raw = localStorage.getItem('pipboy:state');
+        if (!raw) return JSON.parse(JSON.stringify(DEFAULTS));
+        const parsed = JSON.parse(raw);
+        // shallow-merge with defaults to survive updates
+        return {
+          engine: { ...DEFAULTS.engine, ...(parsed.engine||{}) },
+          timeFormat: parsed.timeFormat || DEFAULTS.timeFormat,
+          theme: { ...DEFAULTS.theme, ...(parsed.theme||{}) },
+          status: { ...DEFAULTS.status, ...(parsed.status||{}) },
+          bookmarks: Array.isArray(parsed.bookmarks) ? parsed.bookmarks : DEFAULTS.bookmarks,
+          map: Array.isArray(parsed.map) ? parsed.map : DEFAULTS.map,
+        };
+      } catch { return JSON.parse(JSON.stringify(DEFAULTS)); }
+    };
+    let state = loadState();
+
+    const save = () => localStorage.setItem('pipboy:state', JSON.stringify(state));
+
+    // ==============================
+    // RENDER HELPERS
+    // ==============================
+    const el = sel => document.querySelector(sel);
+    const grid = el('#grid');
+    const mapGrid = el('#mapGrid');
+
+    function renderTheme(){
+      document.documentElement.style.setProperty('--fg', state.theme.fg);
+      document.documentElement.style.setProperty('--accent', state.theme.accent);
+      document.documentElement.style.setProperty('--glow-strength', state.theme.glow);
+      document.documentElement.style.setProperty('--scanline-opacity', state.theme.scan);
+      document.documentElement.style.setProperty('--grid', `rgba(157,252,149,${state.theme.gridOpacity})`);
+      el('#themeName').textContent = 'Pip‑Green';
+    }
+
+    function card({title, url, emoji}, i, isMap=false){
+      const c = document.createElement('div');
+      c.className = 'card';
+      c.innerHTML = `<span class="edit" title="Edit">✎</span><a href="${url}" target="_self"><div><span class="emoji">${emoji||'🔗'}</span><span class="title">${title}</span></div><div class="url">${url}</div></a>`;
+      c.querySelector('.edit').addEventListener('click', (ev)=>{
+        ev.preventDefault();
+        const list = isMap ? state.map : state.bookmarks;
+        const current = list[i];
+        const title = prompt('Title', current.title);
+        if (title===null) return; // cancel
+        const url = prompt('URL', current.url);
+        if (url===null) return;
+        const emoji = prompt('Emoji (optional)', current.emoji||'');
+        list[i] = { title, url, emoji };
+        save();
+        render();
+      });
+      return c;
+    }
+
+    function renderGrids(){
+      grid.innerHTML = '';
+      state.bookmarks.forEach((b, i)=> grid.appendChild(card(b, i, false)) );
+      mapGrid.innerHTML = '';
+      state.map.forEach((b, i)=> mapGrid.appendChild(card(b, i, true)) );
+    }
+
+    function renderSide(){
+      el('#hp').textContent = state.status.hp;
+      el('#ap').textContent = state.status.ap;
+      el('#rads').textContent = state.status.rads;
+      el('#lvl').textContent = state.status.lvl;
+      el('#engineName').textContent = state.engine.name;
+      el('#timeFmt').textContent = state.timeFormat==='24'?'24‑hour':'12‑hour';
+    }
+
+    function tick(){
+      const now = new Date();
+      let h = now.getHours();
+      let suf = '';
+      if (state.timeFormat==='12'){
+        suf = h>=12?' PM':' AM';
+        h = h%12 || 12;
+      }
+      const m = String(now.getMinutes()).padStart(2,'0');
+      const s = String(now.getSeconds()).padStart(2,'0');
+      el('#clock').textContent = `${h}:${m}:${s}${suf}`;
+    }
+
+    // ==============================
+    // SEARCH
+    // ==============================
+    function performSearch(){
+      const q = el('#q').value.trim();
+      const url = state.engine.tmpl.replace('{q}', encodeURIComponent(q));
+      window.open(url, state.engine.target);
+    }
+
+    // ==============================
+    // SETTINGS
+    // ==============================
+    const modal = el('#settingsModal');
+    function openSettings(){
+      // Fill inputs from state
+      el('#engineNameInput').value = state.engine.name;
+      el('#engineTmplInput').value = state.engine.tmpl;
+      el('#engineTarget').value = state.engine.target;
+
+      el('#fgColor').value = toHex(state.theme.fg);
+      el('#accentColor').value = toHex(state.theme.accent);
+      el('#gridOpacity').value = state.theme.gridOpacity;
+      el('#scanOpacity').value = state.theme.scan;
+      el('#glow').value = state.theme.glow;
+      el('#timeFormat').value = state.timeFormat;
+
+      el('#hpInput').value = state.status.hp;
+      el('#apInput').value = state.status.ap;
+      el('#radsInput').value = state.status.rads;
+      el('#lvlInput').value = state.status.lvl;
+
+      el('#bookmarksJson').value = JSON.stringify(state.bookmarks, null, 2);
+      el('#mapJson').value = JSON.stringify(state.map, null, 2);
+
+      modal.classList.add('open');
+    }
+    function closeSettings(){ modal.classList.remove('open'); }
+
+    function toHex(c){
+      // Accept named or rgb(a) and return hex; if already hex return it
+      const s = (c||'').trim();
+      if (s.startsWith('#')) return s;
+      const m = s.match(/rgba?\((\d+),(\d+),(\d+)/);
+      if (m) {
+        const [_,r,g,b] = m.map(Number);
+        return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+      }
+      return '#9dfc95';
+    }
+
+    function applySettings(){
+      state.engine.name = el('#engineNameInput').value || 'Search';
+      state.engine.tmpl = el('#engineTmplInput').value || 'https://duckduckgo.com/?q={q}';
+      state.engine.target = el('#engineTarget').value || '_self';
+
+      state.theme.fg = el('#fgColor').value;
+      state.theme.accent = el('#accentColor').value;
+      state.theme.gridOpacity = clamp(parseFloat(el('#gridOpacity').value), 0, 0.2);
+      state.theme.scan = clamp(parseFloat(el('#scanOpacity').value), 0, 0.35);
+      state.theme.glow = clamp(parseFloat(el('#glow').value), 0, 1.2);
+
+      state.timeFormat = el('#timeFormat').value;
+
+      state.status.hp = el('#hpInput').value || '95%';
+      state.status.ap = el('#apInput').value || '70%';
+      state.status.rads = el('#radsInput').value || '2';
+      state.status.lvl = el('#lvlInput').value || '21';
+
+      // JSON blocks
+      try { state.bookmarks = JSON.parse(el('#bookmarksJson').value || '[]'); } catch {}
+      try { state.map = JSON.parse(el('#mapJson').value || '[]'); } catch {}
+
+      save();
+      render();
+    }
+
+    function clamp(v, min, max){ return isNaN(v) ? min : Math.max(min, Math.min(max, v)); }
+
+    // Export / Import
+    function exportJson(){
+      const blob = new Blob([ JSON.stringify(state, null, 2) ], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'pipboy-settings.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    function importJson(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          state = {
+            engine: { ...DEFAULTS.engine, ...(data.engine||{}) },
+            timeFormat: data.timeFormat || DEFAULTS.timeFormat,
+            theme: { ...DEFAULTS.theme, ...(data.theme||{}) },
+            status: { ...DEFAULTS.status, ...(data.status||{}) },
+            bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : DEFAULTS.bookmarks,
+            map: Array.isArray(data.map) ? data.map : DEFAULTS.map,
+          };
+          save();
+          render();
+        } catch(e){ alert('Invalid JSON'); }
+      };
+      reader.readAsText(file);
+    }
+
+    function resetAll(){
+      if (!confirm('Reset to defaults?')) return;
+      state = JSON.parse(JSON.stringify(DEFAULTS));
+      save();
+      render();
+    }
+
+    // ==============================
+    // EVENTS & INIT
+    // ==============================
+    function render(){
+      renderTheme();
+      renderGrids();
+      renderSide();
+      // grid background lines
+      document.body.style.backgroundImage = `radial-gradient(1200px 800px at 50% 40%, rgba(157,252,149,0.05), transparent 60%), linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px)`;
+      document.body.style.backgroundSize = `auto, 40px 40px, 40px 40px`;
+    }
+
+    // Tabs
+    document.querySelectorAll('#tabs .tab').forEach(tab => {
+      tab.addEventListener('click', ()=>{
+        document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.remove('active'));
+        tab.classList.add('active');
+        const id = tab.dataset.tab;
+        document.querySelectorAll('main > section').forEach(sec => sec.style.display = (sec.id===id)?'block':'none');
+      });
+    });
+
+    // Search
+    el('#searchBtn').addEventListener('click', performSearch);
+    el('#q').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ performSearch(); } });
+
+    // Quick add
+    el('#addBookmark').addEventListener('click', ()=>{
+      const title = prompt('Bookmark title'); if (!title) return;
+      const url = prompt('URL'); if (!url) return;
+      const emoji = prompt('Emoji (optional)') || '';
+      state.bookmarks.push({ title, url, emoji });
+      save(); render();
+    });
+
+    // Settings controls
+    const openers = [el('#openSettings'), el('#gear')];
+    openers.forEach(b => b && b.addEventListener('click', openSettings));
+    el('#closeSettings').addEventListener('click', ()=>{ applySettings(); closeSettings(); });
+    el('#resetBtn').addEventListener('click', resetAll);
+    el('#exportBtn').addEventListener('click', exportJson);
+    el('#importBtn').addEventListener('click', ()=> el('#importFile').click());
+    el('#importFile').addEventListener('change', (e)=>{
+      if (e.target.files && e.target.files[0]) importJson(e.target.files[0]);
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if (e.key === '/') { e.preventDefault(); el('#q').focus(); }
+      if (e.key.toLowerCase() === 'n') { e.preventDefault(); el('#addBookmark').click(); }
+    });
+
+    // Clock
+    setInterval(tick, 1000); tick();
+
+    // Notes persistence
+    const notes = el('#notes');
+    notes.value = localStorage.getItem('pipboy:notes') || notes.value;
+    notes.addEventListener('input', ()=> localStorage.setItem('pipboy:notes', notes.value));
+
+    // First render
+    render();
+  </script>
+</body>
+</html>
